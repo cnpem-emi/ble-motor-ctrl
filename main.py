@@ -26,18 +26,18 @@ class MotorService(Service):
 
 
 class PosCharacteristic(Characteristic):
-    POS_CHARACTERISTIC_UUID = "00000002-710e-4a5b-8d75-3e5b444bc3cf"
-
-    def __init__(self, service):
+    def __init__(self, service, pv_name="test1", id=2):
         self.notifying = False
+        self.POS_CHARACTERISTIC_UUID = f"0000000{id}-710e-4a5b-8d75-3e5b444bc3cf"
 
         Characteristic.__init__(self, self.POS_CHARACTERISTIC_UUID, ["write", "read", "notify"], service)
+        self.pv_name = pv_name
         self.add_descriptor(PosDescriptor(self))
         self.add_descriptor(RealPosDescriptor(self))
         self.add_descriptor(PVDescriptor(self))
 
     def get_position(self):
-        strtemp = str(round(caget("test1-SP.VAL"), 5))
+        strtemp = str(round(caget(f"{self.pv_name}-RB.VAL"), 5))
         return [dbus.Byte(c.encode()) for c in strtemp]
 
     def set_pos_callback(self):
@@ -65,7 +65,7 @@ class PosCharacteristic(Characteristic):
 
     def WriteValue(self, value, options):
         try:
-            caput("test1-SP", "".join([str(v) for v in value]))
+            caput(self.pv_name, "".join([str(v) for v in value]))
         except Exception as e:
             print(e)
         return value
@@ -75,11 +75,12 @@ class PosDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2910"
 
     def __init__(self, characteristic):
+        self.characteristic = characteristic
         Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
 
     def ReadValue(self, options):
         value = []
-        desc = caget("test1-RB.DESC")
+        desc = caget(f"{self.characteristic.pv_name}-RB.DESC")
 
         for c in desc:
             value.append(dbus.Byte(c.encode()))
@@ -91,49 +92,40 @@ class RealPosDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2911"
 
     def __init__(self, characteristic):
+        self.characteristic = characteristic
         Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
 
     def ReadValue(self, options):
-        strtemp = str(round(caget("test1-RB.VAL"), 5))
-        return [dbus.Byte(c.encode()) for c in strtemp]
+        try:                             
+            strtemp = str(round(caget(f"{self.characteristic.pv_name}-RB.VAL"), 5))
+            return [dbus.Byte(c.encode()) for c in strtemp]
+        except Exception as e:
+            print(e)
 
 
 class PVDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2912"
 
     def __init__(self, characteristic):
+        self.characteristic = characteristic
         Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
 
     def ReadValue(self, options):
-        return [dbus.Byte(c.encode()) for c in "input1"]
+        try:
+            return [dbus.Byte(c.encode()) for c in self.characteristic.pv_name]
+        except Exception as e:
+            print(e)
 
 
 class UnitCharacteristic(Characteristic):
     UNIT_CHARACTERISTIC_UUID = "00000006-710e-4a5b-8d75-3e5b444bc3cf"
 
-    def __init__(self, service):
+    def __init__(self, service, pv_name="test1"):
+        self.pv_name = pv_name
         Characteristic.__init__(self, self.UNIT_CHARACTERISTIC_UUID, ["read"], service)
-        self.add_descriptor(UnitDescriptor(self))
 
     def ReadValue(self, options):
-        return [dbus.Byte(caget("test1-RB.EGU").encode())]
-
-
-class UnitDescriptor(Descriptor):
-    UNIT_DESCRIPTOR_UUID = "2901"
-    UNIT_DESCRIPTOR_VALUE = "Unit"
-
-    def __init__(self, characteristic):
-        Descriptor.__init__(self, self.UNIT_DESCRIPTOR_UUID, ["read"], characteristic)
-
-    def ReadValue(self, options):
-        value = []
-        desc = self.UNIT_DESCRIPTOR_VALUE
-
-        for c in desc:
-            value.append(dbus.Byte(c.encode()))
-
-        return value
+        return [dbus.Byte(caget(f"{self.pv_name}-RB.EGU").encode())]
 
 
 app = Application()
