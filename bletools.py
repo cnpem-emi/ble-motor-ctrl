@@ -20,24 +20,25 @@ SOFTWARE.
 """
 
 import dbus
+
 try:
-  from gi.repository import GObject
+    from gi.repository import GObject
 except ImportError:
-    import gobject as GObject
+    import gobject as GObject  # noqa: F401
 
 BLUEZ_SERVICE_NAME = "org.bluez"
 LE_ADVERTISING_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
 DBUS_OM_IFACE = "org.freedesktop.DBus.ObjectManager"
 
+
 class BleTools(object):
     @classmethod
     def get_bus(self):
-         return dbus.SystemBus()
+        return dbus.SystemBus()
 
     @classmethod
     def find_adapter(self, bus):
-        remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, "/"),
-                               DBUS_OM_IFACE)
+        remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OM_IFACE)
         objects = remote_om.GetManagedObjects()
 
         for o, props in objects.items():
@@ -48,10 +49,14 @@ class BleTools(object):
 
     @classmethod
     def power_adapter(self):
+        bus = self.get_bus()
+
         adapter = self.get_adapter()
 
-        adapter_props = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter),
-                "org.freedesktop.DBus.Properties")
+        adapter_props = dbus.Interface(
+            bus.get_object(BLUEZ_SERVICE_NAME, adapter),
+            "org.freedesktop.DBus.Properties",
+        )
         adapter_props.Set("org.bluez.Adapter1", "Powered", dbus.Boolean(1))
 
     @classmethod
@@ -68,6 +73,6 @@ class BleTools(object):
         devices = self.get_connected_devices()
 
         for mac in devices:
-           if "dev" in mac and "service" not in mac:
-              device = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, mac), "org.bluez.Device1")
-              device.Disconnect()
+            if "dev" in mac and "service" not in mac:
+                device = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, mac), "org.bluez.Device1")
+                device.Disconnect()
