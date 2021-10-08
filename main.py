@@ -5,7 +5,7 @@ from advertisement import Advertisement
 from service import Application, Service, Characteristic, Descriptor
 
 GATT_CHRC_IFACE = "org.bluez.GattCharacteristic1"
-NOTIFY_TIMEOUT = 15000
+NOTIFY_TIMEOUT = 10000
 
 
 class MotorAdvertisement(Advertisement):
@@ -22,6 +22,13 @@ class MotorService(Service):
     def __init__(self, index):
         Service.__init__(self, index, self.MOTOR_SVC_UUID, True)
         self.add_characteristic(PosCharacteristic(self))
+        self.add_characteristic(PosCharacteristic(self, pv_name="test2", id=3))
+        self.add_characteristic(PosCharacteristic(self, pv_name="test3", id=4))
+
+        self.add_characteristic(MovnCharacteristic(self, id=6))
+        self.add_characteristic(MovnCharacteristic(self, pv_name="test2", id=7))
+        self.add_characteristic(MovnCharacteristic(self, pv_name="test3", id=8))
+
         self.add_characteristic(UnitCharacteristic(self))
 
 
@@ -32,9 +39,11 @@ class PosCharacteristic(Characteristic):
 
         Characteristic.__init__(self, self.POS_CHARACTERISTIC_UUID, ["write", "read", "notify"], service)
         self.pv_name = pv_name
-        self.add_descriptor(PosDescriptor(self))
-        self.add_descriptor(RealPosDescriptor(self))
+        self.value = 0
+        self.add_descriptor(DescDescriptor(self))
+        self.add_descriptor(TargetPosDescriptor(self))
         self.add_descriptor(PVDescriptor(self))
+        self.add_descriptor(RlvPosDescriptor(self))
 
     def get_position(self):
         strtemp = str(round(caget(f"{self.pv_name}-RB.VAL"), 5))
@@ -43,7 +52,9 @@ class PosCharacteristic(Characteristic):
     def set_pos_callback(self):
         if self.notifying:
             value = self.get_position()
-            self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": value}, [])
+            if value != self.value:
+                self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": value}, [])
+                self.value = value
 
         return self.notifying
 
@@ -61,17 +72,16 @@ class PosCharacteristic(Characteristic):
         self.notifying = False
 
     def ReadValue(self, options):
+        # Real pos
         return self.get_position()
 
     def WriteValue(self, value, options):
-        try:
-            caput(self.pv_name, "".join([str(v) for v in value]))
-        except Exception as e:
-            print(e)
+        # Target pos
+        caput(self.pv_name+"-SP", "".join([str(v) for v in value]))
         return value
 
 
-class PosDescriptor(Descriptor):
+class DescDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2910"
 
     def __init__(self, characteristic):
@@ -88,7 +98,7 @@ class PosDescriptor(Descriptor):
         return value
 
 
-class RealPosDescriptor(Descriptor):
+class TargetPosDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2911"
 
     def __init__(self, characteristic):
@@ -96,12 +106,8 @@ class RealPosDescriptor(Descriptor):
         Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
 
     def ReadValue(self, options):
-        try:                             
-            strtemp = str(round(caget(f"{self.characteristic.pv_name}-RB.VAL"), 5))
-            return [dbus.Byte(c.encode()) for c in strtemp]
-        except Exception as e:
-            print(e)
-
+        strtemp = str(round(caget(f"{self.characteristic.pv_name}-RB.VAL"), 5))
+        return [dbus.Byte(c.encode()) for c in strtemp]
 
 class PVDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2912"
@@ -111,14 +117,67 @@ class PVDescriptor(Descriptor):
         Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
 
     def ReadValue(self, options):
+        return [dbus.Byte(c.encode()) for c in self.characteristic.pv_name]
+
+class RlvPosDescriptor(Descriptor):
+    POS_DESCRIPTOR_UUID = "2913"
+
+    def __init__(self, characteristic):
+        self.characteristic = characteristic
+        Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read", "write"], characteristic)
+
+    def ReadValue(self, options):
         try:
-            return [dbus.Byte(c.encode()) for c in self.characteristic.pv_name]
+            strtemp = str(round(caget(f"{self.characteristic.pv_name}-SP.VAL"), 5))
+            return [dbus.Byte(c.encode()) for c in strtemp]
         except Exception as e:
             print(e)
 
+    def WriteValue(self, value, options):
+        caput(self.characteristic.pv_name + "-SP", "".join([str(v) for v in value]))
+        return value
+
+class MovnCharacteristic(Characteristic):
+    def __init__(self, service, pv_name="test1", id=6):
+        self.notifying = False
+        self.POS_CHARACTERISTIC_UUID = f"0000000{id}-710e-4a5b-8d75-3e5b444bc3cf"
+
+        Characteristic.__init__(self, self.POS_CHARACTERISTIC_UUID, ["read", "notify"], service)
+        self.pv_name = pv_name
+        self.moving = 0
+
+    def get_status(self):
+        strtemp = "1" if float(caget(f"{self.pv_name}-SP.VAL")) else "0"
+        return [dbus.Byte(c.encode()) for c in strtemp]
+
+    def set_status_callback(self):
+        if self.notifying:
+            status = self.get_status()
+            if status != self.moving:
+                self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": status}, [])
+                self.moving = status
+
+        return self.notifying
+
+    def StartNotify(self):
+        if self.notifying:
+            return
+
+        self.notifying = True
+
+        status = self.get_status()
+        self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": status}, [])
+        self.add_timeout(NOTIFY_TIMEOUT, self.set_status_callback)
+
+    def StopNotify(self):
+        self.notifying = False
+
+    def ReadValue(self, options):
+        return self.get_status()
+
 
 class UnitCharacteristic(Characteristic):
-    UNIT_CHARACTERISTIC_UUID = "00000006-710e-4a5b-8d75-3e5b444bc3cf"
+    UNIT_CHARACTERISTIC_UUID = "0000000f-710e-4a5b-8d75-3e5b444bc3cf"
 
     def __init__(self, service, pv_name="test1"):
         self.pv_name = pv_name
