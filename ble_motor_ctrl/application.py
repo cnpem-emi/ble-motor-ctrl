@@ -25,9 +25,9 @@ class MotorService(Service):
         self.add_characteristic(PosCharacteristic(self, pv_name="IOC:m2", id=3))
         self.add_characteristic(PosCharacteristic(self, pv_name="IOC:m3", id=4))
 
-        self.add_characteristic(MovnCharacteristic(self, id=6))
-        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m2", id=7))
-        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m3", id=8))
+        self.add_characteristic(MovnCharacteristic(self, id=2))
+        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m2", id=3))
+        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m3", id=4))
 
 
 class PosCharacteristic(Characteristic):
@@ -166,9 +166,9 @@ class StopDescriptor(Descriptor):
         return value
 
 class MovnCharacteristic(Characteristic):
-    def __init__(self, service, pv_name="IOC:m1", id=6):
+    def __init__(self, service, pv_name="IOC:m1", id=2):
         self.notifying = False
-        self.POS_CHARACTERISTIC_UUID = f"0000000{id}-710e-4a5b-8d75-3e5b444bc3cf"
+        self.POS_CHARACTERISTIC_UUID = f"0000000{id}-710f-4a5b-8d75-3e5b444bc3cf"
 
         Characteristic.__init__(self, self.POS_CHARACTERISTIC_UUID, ["read", "notify"], service)
         self.pv_name = pv_name
