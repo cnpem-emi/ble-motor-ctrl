@@ -154,6 +154,7 @@ class LvioDescriptor(Descriptor):
         except Exception as e:
             print(e)
 
+
 class StopDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2915"
 
@@ -164,6 +165,7 @@ class StopDescriptor(Descriptor):
     def WriteValue(self, value, options):
         caput(self.characteristic.pv_name + ".STOP", "".join([str(v) for v in value]))
         return value
+
 
 class MovnCharacteristic(Characteristic):
     def __init__(self, service, pv_name="IOC:m1", id=2):
@@ -202,6 +204,7 @@ class MovnCharacteristic(Characteristic):
 
     def ReadValue(self, options):
         return self.get_status()
+
 
 def register():
     app = Application()
