@@ -27,7 +27,7 @@ try:
     from gi.repository import GObject
 except ImportError:
     import gobject as GObject
-from bletools import BleTools
+from ble_motor_ctrl.bletools import BleTools
 
 BLUEZ_SERVICE_NAME = "org.bluez"
 GATT_MANAGER_IFACE = "org.bluez.GattManager1"
