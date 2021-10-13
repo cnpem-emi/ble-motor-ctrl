@@ -5,7 +5,7 @@ from advertisement import Advertisement
 from service import Application, Service, Characteristic, Descriptor
 
 GATT_CHRC_IFACE = "org.bluez.GattCharacteristic1"
-NOTIFY_TIMEOUT = 10000
+NOTIFY_TIMEOUT = 2000
 
 
 class MotorAdvertisement(Advertisement):
@@ -22,18 +22,16 @@ class MotorService(Service):
     def __init__(self, index):
         Service.__init__(self, index, self.MOTOR_SVC_UUID, True)
         self.add_characteristic(PosCharacteristic(self))
-        self.add_characteristic(PosCharacteristic(self, pv_name="test2", id=3))
-        self.add_characteristic(PosCharacteristic(self, pv_name="test3", id=4))
+        self.add_characteristic(PosCharacteristic(self, pv_name="IOC:m2", id=3))
+        self.add_characteristic(PosCharacteristic(self, pv_name="IOC:m3", id=4))
 
         self.add_characteristic(MovnCharacteristic(self, id=6))
-        self.add_characteristic(MovnCharacteristic(self, pv_name="test2", id=7))
-        self.add_characteristic(MovnCharacteristic(self, pv_name="test3", id=8))
-
-        self.add_characteristic(UnitCharacteristic(self))
+        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m2", id=7))
+        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m3", id=8))
 
 
 class PosCharacteristic(Characteristic):
-    def __init__(self, service, pv_name="test1", id=2):
+    def __init__(self, service, pv_name="IOC:m1", id=2):
         self.notifying = False
         self.POS_CHARACTERISTIC_UUID = f"0000000{id}-710e-4a5b-8d75-3e5b444bc3cf"
 
@@ -44,9 +42,11 @@ class PosCharacteristic(Characteristic):
         self.add_descriptor(TargetPosDescriptor(self))
         self.add_descriptor(PVDescriptor(self))
         self.add_descriptor(RlvPosDescriptor(self))
+        self.add_descriptor(LvioDescriptor(self))
+        self.add_descriptor(StopDescriptor(self))
 
     def get_position(self):
-        strtemp = str(round(caget(f"{self.pv_name}-RB.VAL"), 5))
+        strtemp = str(round(caget(f"{self.pv_name}.RBV"), 5))
         return [dbus.Byte(c.encode()) for c in strtemp]
 
     def set_pos_callback(self):
@@ -77,7 +77,7 @@ class PosCharacteristic(Characteristic):
 
     def WriteValue(self, value, options):
         # Target pos
-        caput(self.pv_name+"-SP", "".join([str(v) for v in value]))
+        caput(self.pv_name, "".join([str(v) for v in value]))
         return value
 
 
@@ -90,7 +90,7 @@ class DescDescriptor(Descriptor):
 
     def ReadValue(self, options):
         value = []
-        desc = caget(f"{self.characteristic.pv_name}-RB.DESC")
+        desc = caget(f"{self.characteristic.pv_name}.DESC")
 
         for c in desc:
             value.append(dbus.Byte(c.encode()))
@@ -106,8 +106,9 @@ class TargetPosDescriptor(Descriptor):
         Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
 
     def ReadValue(self, options):
-        strtemp = str(round(caget(f"{self.characteristic.pv_name}-RB.VAL"), 5))
+        strtemp = str(round(caget(f"{self.characteristic.pv_name}.VAL"), 5))
         return [dbus.Byte(c.encode()) for c in strtemp]
+
 
 class PVDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2912"
@@ -119,6 +120,7 @@ class PVDescriptor(Descriptor):
     def ReadValue(self, options):
         return [dbus.Byte(c.encode()) for c in self.characteristic.pv_name]
 
+
 class RlvPosDescriptor(Descriptor):
     POS_DESCRIPTOR_UUID = "2913"
 
@@ -128,17 +130,43 @@ class RlvPosDescriptor(Descriptor):
 
     def ReadValue(self, options):
         try:
-            strtemp = str(round(caget(f"{self.characteristic.pv_name}-SP.VAL"), 5))
+            strtemp = str(round(caget(f"{self.characteristic.pv_name}.RLV"), 5))
             return [dbus.Byte(c.encode()) for c in strtemp]
         except Exception as e:
             print(e)
 
     def WriteValue(self, value, options):
-        caput(self.characteristic.pv_name + "-SP", "".join([str(v) for v in value]))
+        caput(self.characteristic.pv_name + ".RLV", "".join([str(v) for v in value]))
+        return value
+
+
+class LvioDescriptor(Descriptor):
+    POS_DESCRIPTOR_UUID = "2914"
+
+    def __init__(self, characteristic):
+        self.characteristic = characteristic
+        Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
+
+    def ReadValue(self, options):
+        try:
+            strtemp = str(caget(f"{self.characteristic.pv_name}.LVIO"))
+            return [dbus.Byte(c.encode()) for c in strtemp]
+        except Exception as e:
+            print(e)
+
+class StopDescriptor(Descriptor):
+    POS_DESCRIPTOR_UUID = "2915"
+
+    def __init__(self, characteristic):
+        self.characteristic = characteristic
+        Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["write"], characteristic)
+
+    def WriteValue(self, value, options):
+        caput(self.characteristic.pv_name + ".STOP", "".join([str(v) for v in value]))
         return value
 
 class MovnCharacteristic(Characteristic):
-    def __init__(self, service, pv_name="test1", id=6):
+    def __init__(self, service, pv_name="IOC:m1", id=6):
         self.notifying = False
         self.POS_CHARACTERISTIC_UUID = f"0000000{id}-710e-4a5b-8d75-3e5b444bc3cf"
 
@@ -147,7 +175,7 @@ class MovnCharacteristic(Characteristic):
         self.moving = 0
 
     def get_status(self):
-        strtemp = "1" if float(caget(f"{self.pv_name}-SP.VAL")) else "0"
+        strtemp = "1" if float(caget(f"{self.pv_name}.MOVN")) else "0"
         return [dbus.Byte(c.encode()) for c in strtemp]
 
     def set_status_callback(self):
@@ -174,18 +202,6 @@ class MovnCharacteristic(Characteristic):
 
     def ReadValue(self, options):
         return self.get_status()
-
-
-class UnitCharacteristic(Characteristic):
-    UNIT_CHARACTERISTIC_UUID = "0000000f-710e-4a5b-8d75-3e5b444bc3cf"
-
-    def __init__(self, service, pv_name="test1"):
-        self.pv_name = pv_name
-        Characteristic.__init__(self, self.UNIT_CHARACTERISTIC_UUID, ["read"], service)
-
-    def ReadValue(self, options):
-        return [dbus.Byte(caget(f"{self.pv_name}-RB.EGU").encode())]
-
 
 app = Application()
 app.add_service(MotorService(0))
