@@ -9,9 +9,9 @@ NOTIFY_TIMEOUT = 2000
 
 
 class MotorAdvertisement(Advertisement):
-    def __init__(self, index):
+    def __init__(self, index, name="Generic Bluetooth Controller"):
         Advertisement.__init__(self, index, "peripheral")
-        self.add_local_name("Motor - Monochromator 1")
+        self.add_local_name(name)
         self.add_manufacturer_data(0x000D, [0, 0])  # Texas Instruments
         self.include_tx_power = True
 
@@ -19,15 +19,11 @@ class MotorAdvertisement(Advertisement):
 class MotorService(Service):
     MOTOR_SVC_UUID = "84e7f883-7c80-4b64-88a5-6077ce2e8925"
 
-    def __init__(self, index):
+    def __init__(self, index, pvs):
         Service.__init__(self, index, self.MOTOR_SVC_UUID, True)
-        self.add_characteristic(PosCharacteristic(self))
-        self.add_characteristic(PosCharacteristic(self, pv_name="IOC:m2", id=3))
-        self.add_characteristic(PosCharacteristic(self, pv_name="IOC:m3", id=4))
-
-        self.add_characteristic(MovnCharacteristic(self, id=2))
-        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m2", id=3))
-        self.add_characteristic(MovnCharacteristic(self, pv_name="IOC:m3", id=4))
+        for id, pv in enumerate(pvs, 2):
+            self.add_characteristic(PosCharacteristic(self, pv_name=pv, id=id))
+            self.add_characteristic(MovnCharacteristic(self, pv_name=pv, id=id))
 
 
 class PosCharacteristic(Characteristic):
@@ -206,12 +202,12 @@ class MovnCharacteristic(Characteristic):
         return self.get_status()
 
 
-def register():
+def register(pvs, name):
     app = Application()
-    app.add_service(MotorService(0))
+    app.add_service(MotorService(0, pvs))
     app.register()
 
-    adv = MotorAdvertisement(0)
+    adv = MotorAdvertisement(0, name)
     adv.register()
 
     try:
