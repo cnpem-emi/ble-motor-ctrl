@@ -7,7 +7,7 @@ An EPICS motor control interface that communicates through Bluetooth LE with any
 
 ```bash
 apt install python3-gi python3-gi-cairo
-pip3 install dbus-python 
+pip3 install -r requirement.txt
 ```
 
 # Running 
