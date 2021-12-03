@@ -65,3 +65,9 @@ All characteristics are terminated in `-4a5b-8d75-3e5b444bc3cf`
 * Holds `.MOVN` field (movement status). Returns `1` when moving, `0` when stopped.
 * Permissions: Read, Notify
 `
+### `00000001-7110` (Custom PV)
+
+* Returns values for one custom PV. When read, returns the PV name. When written to, changes the PV that is polled. When notifying, returns the PV value.
+* Permissions: Write, Read, Notify
+`
+
