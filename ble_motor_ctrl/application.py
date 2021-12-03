@@ -24,6 +24,7 @@ class MotorService(Service):
         for id, pv in enumerate(pvs, 2):
             self.add_characteristic(PosCharacteristic(self, pv_name=pv, id=id))
             self.add_characteristic(MovnCharacteristic(self, pv_name=pv, id=id))
+        self.add_characteristic(RBPVCharacteristic(self))
 
 
 class PosCharacteristic(Characteristic):
@@ -42,7 +43,7 @@ class PosCharacteristic(Characteristic):
         self.add_descriptor(StopDescriptor(self))
 
     def get_position(self):
-        strtemp = str(round(caget(f"{self.pv_name}.RBV"), 5))
+        strtemp = str(round(caget(f"{self.pv_name}.RBV", timeout=1), 5))
         return [dbus.Byte(c.encode()) for c in strtemp]
 
     def set_pos_callback(self):
@@ -86,7 +87,7 @@ class DescDescriptor(Descriptor):
 
     def ReadValue(self, options):
         value = []
-        desc = caget(f"{self.characteristic.pv_name}.DESC")
+        desc = caget(f"{self.characteristic.pv_name}.DESC", timeout=1)
 
         for c in desc:
             value.append(dbus.Byte(c.encode()))
@@ -102,7 +103,7 @@ class TargetPosDescriptor(Descriptor):
         Descriptor.__init__(self, self.POS_DESCRIPTOR_UUID, ["read"], characteristic)
 
     def ReadValue(self, options):
-        strtemp = str(round(caget(f"{self.characteristic.pv_name}.VAL"), 5))
+        strtemp = str(round(caget(f"{self.characteristic.pv_name}.VAL", timeout=1), 5))
         return [dbus.Byte(c.encode()) for c in strtemp]
 
 
@@ -126,7 +127,7 @@ class RlvPosDescriptor(Descriptor):
 
     def ReadValue(self, options):
         try:
-            strtemp = str(round(caget(f"{self.characteristic.pv_name}.RLV"), 5))
+            strtemp = str(round(caget(f"{self.characteristic.pv_name}.RLV", timeout=1), 5))
             return [dbus.Byte(c.encode()) for c in strtemp]
         except Exception as e:
             print(e)
@@ -145,7 +146,7 @@ class LvioDescriptor(Descriptor):
 
     def ReadValue(self, options):
         try:
-            strtemp = str(caget(f"{self.characteristic.pv_name}.LVIO"))
+            strtemp = str(caget(f"{self.characteristic.pv_name}.LVIO", timeout=1))
             return [dbus.Byte(c.encode()) for c in strtemp]
         except Exception as e:
             print(e)
@@ -173,7 +174,7 @@ class MovnCharacteristic(Characteristic):
         self.moving = 0
 
     def get_status(self):
-        strtemp = "1" if float(caget(f"{self.pv_name}.MOVN")) else "0"
+        strtemp = "1" if float(caget(f"{self.pv_name}.MOVN", timeout=1)) else "0"
         return [dbus.Byte(c.encode()) for c in strtemp]
 
     def set_status_callback(self):
@@ -200,6 +201,60 @@ class MovnCharacteristic(Characteristic):
 
     def ReadValue(self, options):
         return self.get_status()
+
+
+class RBPVCharacteristic(Characteristic):
+    def __init__(self, service):
+        self.notifying = False
+        self.RBPV_CHARACTERISTIC_UUID = "00000001-7110-4a5b-8d75-3e5b444bc3cf"
+
+        Characteristic.__init__(self, self.RBPV_CHARACTERISTIC_UUID, ["write", "read", "notify"], service)
+        self.pv_name = None
+        self.pv_egu = ""
+        self.pv_value = ""
+
+    def get_value(self):
+        strtemp = f"{str(caget(self.pv_name, timeout=0.3) or 'Invalid')} {self.pv_egu}"
+        return [dbus.Byte(c.encode()) for c in strtemp]
+
+    def set_value_callback(self):
+        if self.notifying:
+            if self.pv_name:
+                value = self.get_value()
+                self.pv_value = value
+            else:
+                value = [dbus.Byte(c.encode()) for c in "Invalid"]
+            self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": value}, [])
+
+        return self.notifying
+
+    def StartNotify(self):
+        if self.notifying:
+            return
+
+        if self.pv_name:
+            self.pv_egu = caget(self.pv_name + ".EGU", timeout=0.1) or " "
+            value = self.get_value()
+        else:
+            value = [dbus.Byte(c.encode()) for c in "Invalid"]
+
+        self.notifying = True
+        self.PropertiesChanged(GATT_CHRC_IFACE, {"Value": value}, [])
+        self.add_timeout(NOTIFY_TIMEOUT, self.set_value_callback)
+
+    def StopNotify(self):
+        self.notifying = False
+
+    def ReadValue(self, options):
+        return [dbus.Byte(c.encode()) for c in self.pv_name or "No PV"]
+
+    def WriteValue(self, value, options):
+        self.pv_name = "".join([str(v) for v in value])
+        if caget(self.pv_name, timeout=0.5):
+            self.pv_egu = caget(self.pv_name + ".EGU", timeout=0.1) or " "
+        else:
+            self.pv_name = None
+        return value
 
 
 def register(pvs, name):

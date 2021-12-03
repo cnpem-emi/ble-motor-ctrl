@@ -4,7 +4,7 @@ from epics import caget
 
 with open("config/config.json", "r") as config_file:
     config = json.load(config_file)
-    
+
 pvs = []
 
 for pv in config.get("pvs"):
